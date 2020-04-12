@@ -271,8 +271,3 @@ A permissive license whose main conditions require preservation of copyright and
 
 
 
-
-Contributing 
-
-Contribution Guide :https://raw.githubusercontent.com/EOSIO/eos/master/CONTRIBUTING.md
-Code of conduct
