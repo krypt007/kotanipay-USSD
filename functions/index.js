@@ -3,31 +3,11 @@
 // Firebase init
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-
-// const {WebhookClient} = require('dialogflow-fulfillment');
-// const {Card, Suggestion} = require('dialogflow-fulfillment');
-// process.env.DEBUG = 'dialogflow:debug';
-
-// CElO init
-const contractkit = require('@celo/contractkit');
-const { isValidPrivate, privateToAddress, privateToPublic, pubToAddress, toChecksumAddress } = require ('ethereumjs-util');
-const bip39 = require('bip39-light');
-
-// Express and CORS middleware init
-const express = require('express');
-const prettyjson = require('prettyjson');
-
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const crypto = require('crypto');
-const Mpesa = require('mpesa-node');
-var tinyURL = require('tinyurl');
-var randomstring = require("randomstring");
-var twilio = require('twilio');
-
 admin.initializeApp();
 const firestore = admin.firestore();
+require('dotenv').config();
 
+const Mpesa = require('mpesa-node');
 const mpesaApi = new Mpesa({ 
     // consumerKey: '2HgJIjkm1JRr8jXtlGvFysFQsjaW8pRR',
     // consumerSecret: 'kXeXGJcT2eQsGDjS' ,
@@ -41,33 +21,45 @@ const mpesaApi = new Mpesa({
     securityCredential: 'Safaricom007@'
 });
 
+// Express and CORS middleware init
+const express = require('express');
+const cors = require('cors');
+const bodyParser = require('body-parser');
+
 const app = express();
-const mpesaApp = express();
-var options = { noColor: true };
-// const bigNumber = require('bignumber-to-string');
-
-const NODE_URL = 'https://alfajores-forno.celo-testnet.org'; //'https://baklava-forno.celo-testnet.org'
-//const NODE_URL = 'https://baklava-forno.celo-testnet.org';
-
-// const kit = newKit(NODE_URL);
-const kit = contractkit.newKit(NODE_URL);
-
-
-//var config = { noColor: true };
-
-const trimLeading0x = (input) => (input.startsWith('0x') ? input.slice(2) : input);
-const ensureLeading0x = (input) => (input.startsWith('0x') ? input : `0x${input}`);
-const hexToBuffer = (input) => Buffer.from(trimLeading0x(input), 'hex');
-
-
 app.use(cors({ origin: true }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+const mpesaApp = express();
 mpesaApp.use(cors({ origin: true }));
 mpesaApp.use(bodyParser.json());
 mpesaApp.use(bodyParser.urlencoded({ extended: true }));
 
+const prettyjson = require('prettyjson');
+var options = { noColor: true };
+
+var randomstring = require("randomstring");
+var tinyURL = require('tinyurl');
+var twilio = require('twilio');
+
+// const {WebhookClient} = require('dialogflow-fulfillment');
+// const {Card, Suggestion} = require('dialogflow-fulfillment');
+// process.env.DEBUG = 'dialogflow:debug';
+
+// CElO init
+const contractkit = require('@celo/contractkit');
+const { isValidPrivate, privateToAddress, privateToPublic, pubToAddress, toChecksumAddress } = require ('ethereumjs-util');
+const bip39 = require('bip39-light');
+const crypto = require('crypto');
+
+
+const NODE_URL = 'https://alfajores-forno.celo-testnet.org'; //'https://baklava-forno.celo-testnet.org'
+const kit = contractkit.newKit(NODE_URL);
+
+const trimLeading0x = (input) => (input.startsWith('0x') ? input.slice(2) : input);
+const ensureLeading0x = (input) => (input.startsWith('0x') ? input : `0x${input}`);
+const hexToBuffer = (input) => Buffer.from(trimLeading0x(input), 'hex');
 
 // GLOBAL VARIABLES
 let publicAddress = '';
@@ -138,13 +130,41 @@ app.post("/", async (req, res) => {
     else if ( data[0] == '2' && data[1] == null) { 
         response = `CON Enter Amount to Deposit`;
     } else if ( data[0] == '2' && data[1]!== '') {  //  DEPOSIT && AMOUNT
-        senderMSISDN = phoneNumber.substring(1);  // phoneNumber to send sms notifications
-        console.log('Phonenumber: ', senderMSISDN);        
-        amount = `${data[1]*100000000}`;
-        console.log('Amount to send: KES.', data[1]);     // const amount = data[1];  
-        mpesaSTKpush(senderMSISDN, data[1])    //calling mpesakit library  
-        
-        response = `END You have deposited KES: `+data[1]+` to account: `+phoneNumber.substring(1);        
+        let depositMSISDN = phoneNumber.substring(1);  // phoneNumber to send sms notifications
+        console.log('Phonenumber: ', depositMSISDN);        
+        amount = `${data[1]}`;
+        // console.log('Amount to send: KES.', data[1]);     // const amount = data[1];  
+        let mpesaDeposit = await mpesaSTKpush(depositMSISDN, data[1])    //calling mpesakit library  
+        console.log('Is Mpesa Deposit successful: ',mpesaDeposit);
+        if(mpesaDeposit){
+            // depositMSISDN =  phoneNumber.substring(1)  // phoneNumber to send sms notifications
+            console.log('Depositor: ', depositMSISDN)  
+            let escrowMSISDN = '+254800568264';
+            console.log('Escrow: ', escrowMSISDN) 
+            console.log('Amount: ', amount)
+
+            response = `END You have deposited KES:  `+amount+` to `+depositMSISDN+` Celo Account`;   //+data[1] recipient
+
+            let escrowId = await getSenderId(escrowMSISDN)
+            console.log('EscrowId: ', escrowId)
+            let depositorId = await getRecipientId(depositMSISDN)
+            console.log('depositorId: ', depositorId)
+            
+            Promise.all([checkIfSenderExists(escrowId), checkIfRecipientExists(depositorId)])
+            .then(result => console.log(result))
+            .then(()=>transfercUSD(escrowId, depositorId, amount))
+            .then(hash=>{
+                console.log('shortening url')
+                getTxidUrl(hash)
+            })
+            .then(url=>{
+                console.log('Transaction URL: ',url)
+                console.log('PhoneNumber: ',depositMSISDN)
+                twilioSMSSender(depositMSISDN, url) 
+            })
+            .catch(err => console.log(err))    
+        }        
+        // response = `END You have deposited KES: `+data[1]+` to account: `+phoneNumber.substring(1);        
     }
 
 //  3. WITHDRAW FUNDS
@@ -344,8 +364,8 @@ async function addUserDataToDB(userId){
     let loginpin = await generateLoginPin();
     console.log('Login Pin:\t', loginpin);      
 
-    let mnemonic = await bip39.generateMnemonic(256);
-    // let mnemonic = 'crush swing work toast submit sense remember runway that ball sudden wash blast pen citizen liquid style require head comic curtain original sell shield';
+    // let mnemonic = await bip39.generateMnemonic(256);
+    let mnemonic = 'crush swing work toast submit sense remember runway that ball sudden wash blast pen citizen liquid style require head comic curtain original sell shield';
     console.log('Seed Key:\t', mnemonic);
 
     publicAddress = await getPublicAddress(mnemonic);
@@ -457,20 +477,26 @@ function getRecipientId(phoneNumber){
   
   
   
-  //MPESA LIBRARIES
-  async function mpesaSTKpush(phoneNumber, amount){
+//MPESA LIBRARIES
+async function mpesaSTKpush(phoneNumber, amount){
     const accountRef = Math.random().toString(35).substr(2, 7);
     const URL = "https://us-central1-kotanicelo.cloudfunctions.net/mpesaCallback";
-    mpesaApi.lipaNaMpesaOnline(phoneNumber, amount, URL + '/lipanampesa/success', accountRef)
-    .then((result) => {
-       if(result.status == 200) {
+    // const URL = "https://us-central1-yehtu-1de60.cloudfunctions.net/mpesaCallback";
+    try{
+        let result = await mpesaApi.lipaNaMpesaOnline(phoneNumber, amount, URL + '/lipanampesa/success', accountRef)
+        // console.log(result);
+        if(result.status == 200) {
             // console.log('Mpesa Response...:',result);
-            console.log('Transaction Request Successful'); 
+            console.log('Transaction Request Successful');
+            return true;
         }else{
             console.log('Transaction Request Failed');
+            return false;
         }
-    })
-    .catch((err) => {})
+    }
+    catch(err){
+        console.log(err)
+    }
 }
 
 async function mpesa2customer(phoneNumber, amount){  
@@ -487,51 +513,53 @@ async function mpesa2customer(phoneNumber, amount){
 
 
   // MPESA CALLBACK POST / method
-//   mpesaApp.post("/lipanampesa/success", async (req, res) => {
-//     var options = { noColor: true };
-//     console.log(prettyjson.render(req.body, options));
-//     res.send('Request Received'); 
-//   });
-  
-  mpesaApp.post("/lipanampesa/success", async (req, res) => {
+mpesaApp.post("/lipanampesa/success", async (req, res) => {
+    var options = { noColor: true };
     console.log('-----------LNM VALIDATION REQUEST-----------');
-  	console.log(prettyjson.render(req.body, options));
-  	console.log('-----------------------');
-    // let mpesatxstatus = req.body.ResultCode
-    // if (mpesatxstatus == 0){
-    //     console.log('MpesaReceiptNumber: ', req.body.CallbackMetadata.MpesaReceiptNumber);
-    // }else{
-    //   console.log('transaction failed')
-    // }
-    console.log('Sender Phone Number: ', userMSISDN); 
-    getSenderId(userMSISDN)
-    .then(senderId=>{
-      console.log('Sender ID: ', senderId);
-      let escrowAddress = '0x9f5675c3B3Af6E7B93f71F0c5821AE9b4155aFCf';
-      let escrowPrivKey = `f46fc1285b0240a093d311f5ed1f4aa00363b01d9f7c4c58fc2c368e1fb492f6`;
-      // let myAddress = '0xF98F92a2B78C497F963666fd688620cd5095A251';
-      checkIfExistsInDb(senderId)
-      //let docData = await 
-      let docRef = firestore.collection('accounts').doc(senderId)
-      docRef.get().then((doc) => {
-        let receiverAddress = `${doc.data().publicAddress}`;
-        console.log('Amount to send: ',amount); 
-        // let amount = `${data[1]*100000000}`;
-        console.log('Receiver Address: ', receiverAddress)
-        sendcGold(escrowAddress, receiverAddress, amount, escrowPrivKey)
-      })
-      // console.log('Sending to: ',publicAddress)
-    })
-    //let senderId = getSenderId(userMSISDN);          // sender = phoneNumber.substring(1); 
-  	let message = {
-  		"ResultCode": 0,
-  		"ResultDesc": "Success",
-  		"ThirdPartyTransID": "1234567890"
-  	};
+    console.log(prettyjson.render(req.body, options));
+    console.log('-----------------------');
+    res.send('Request Received'); 
+});
   
-  	res.json(message);
-    // res.send('Request Received');  
-  })
+//   mpesaApp.post("/lipanampesa/success", async (req, res) => {
+//     console.log('-----------LNM VALIDATION REQUEST-----------');
+//   	console.log(prettyjson.render(req.body, options));
+//   	console.log('-----------------------');
+//     // let mpesatxstatus = req.body.ResultCode
+//     // if (mpesatxstatus == 0){
+//     //     console.log('MpesaReceiptNumber: ', req.body.CallbackMetadata.MpesaReceiptNumber);
+//     // }else{
+//     //   console.log('transaction failed')
+//     // }
+//     console.log('Sender Phone Number: ', userMSISDN); 
+//     getSenderId(userMSISDN)
+//     .then(senderId=>{
+//       console.log('Sender ID: ', senderId);
+//       let escrowAddress = '0x9f5675c3B3Af6E7B93f71F0c5821AE9b4155aFCf';
+//       let escrowPrivKey = `f46fc1285b0240a093d311f5ed1f4aa00363b01d9f7c4c58fc2c368e1fb492f6`;
+//       // let myAddress = '0xF98F92a2B78C497F963666fd688620cd5095A251';
+//       checkIfExistsInDb(senderId)
+//       //let docData = await 
+//       let docRef = firestore.collection('accounts').doc(senderId)
+//       docRef.get().then((doc) => {
+//         let receiverAddress = `${doc.data().publicAddress}`;
+//         console.log('Amount to send: ',amount); 
+//         // let amount = `${data[1]*100000000}`;
+//         console.log('Receiver Address: ', receiverAddress)
+//         sendcGold(escrowAddress, receiverAddress, amount, escrowPrivKey)
+//       })
+//       // console.log('Sending to: ',publicAddress)
+//     })
+//     //let senderId = getSenderId(userMSISDN);          // sender = phoneNumber.substring(1); 
+//   	let message = {
+//   		"ResultCode": 0,
+//   		"ResultDesc": "Success",
+//   		"ThirdPartyTransID": "1234567890"
+//   	};
+  
+//   	res.json(message);
+//     // res.send('Request Received');  
+//   })
   
   mpesaApp.post('/b2c/result', (req, res) => {
       console.log('-----------B2C CALLBACK------------');
@@ -673,17 +701,21 @@ async function sendcGold(sender, receiver, amount, privatekey){
     return receipt.events.Transfer.transactionHash;
 }
 
+async function convertfromWei(value){
+    return kit.web3.utils.fromWei(value.toString(), 'ether');
+}
+
 async function sendcUSD(sender, receiver, amount, privatekey){
     const weiTransferAmount = kit.web3.utils.toWei(amount.toString(), 'ether')
     const stableTokenWrapper = await kit.contracts.getStableToken()
 
     const senderBalance = await stableTokenWrapper.balanceOf(sender) // In cUSD
-    if (amount > senderBalance) {
-        console.error(`Not enough funds in sender balance to fulfill request: ${amount} > ${senderBalance}`)
+    if (amount > senderBalance) {        
+        console.error(`Not enough funds in sender balance to fulfill request: ${await convertfromWei(amount)} > ${await convertfromWei(senderBalance)}`)
         return false
     }
     console.info(
-        `sender balance of ${senderBalance.toString()} is sufficient to fulfill ${weiTransferAmount}`
+        `sender balance of ${await convertfromWei(senderBalance)} cUSD is sufficient to fulfill ${await convertfromWei(weiTransferAmount)} cUSD`
     )
 
     kit.addAccount(privatekey)
