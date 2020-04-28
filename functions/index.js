@@ -133,7 +133,7 @@ app.post("/", async (req, res) => {
         if(mpesaDeposit){
             // depositMSISDN =  phoneNumber.substring(1)  // phoneNumber to send sms notifications
             console.log('Depositor: ', depositMSISDN)  
-            let escrowMSISDN = '+254800568264';
+            let escrowMSISDN = process.env.CELO_ESCROW_MSISDN;
             console.log('Escrow: ', escrowMSISDN) 
             console.log('Amount: ', amount)
 
