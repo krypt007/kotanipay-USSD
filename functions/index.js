@@ -580,8 +580,6 @@ mpesaApp.post("/lipanampesa/success", async (req, res) => {
   //CELOKIT FUNCTIONS
   async function getPublicAddress(mnemonic){
     console.log('Getting your account Public Address:....')
-    //let mnemonic = 'language quiz proud sample canoe trend topic upper coil rack choice engage noodle panda mutual grab shallow thrive forget trophy pull pool mask height';
-    // let mnemonic = 'crush swing work toast submit sense remember runway that ball sudden wash blast pen citizen liquid style require head comic curtain original sell shield';
     let privateKey = await generatePrivKey(mnemonic);
     return new Promise(resolve => { 
         resolve (getAccAddress(getPublicKey(privateKey)));
