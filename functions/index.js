@@ -9,16 +9,14 @@ require('dotenv').config();
 
 const Mpesa = require('mpesa-node');
 const mpesaApi = new Mpesa({ 
-    // consumerKey: '2HgJIjkm1JRr8jXtlGvFysFQsjaW8pRR',
-    // consumerSecret: 'kXeXGJcT2eQsGDjS' ,
-    consumerKey: 'mg5ACxo2LMeGjF7i63nNjOzfAaLiOyUZ',
-    consumerSecret: 'OZV2I8HAZsSVLDoG' ,
-    environment: 'sandbox',
-    shortCode: '603019',
-    initiatorName: 'kotanipay',
-    lipaNaMpesaShortCode: 174379,
-    lipaNaMpesaShortPass: 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919',
-    securityCredential: 'Safaricom007@'
+    consumerKey: process.env.MPESA_API_CONFIG_consumerKey,
+    consumerSecret: process.env.MPESA_API_CONFIG_consumerSecret ,
+    environment: process.env.MPESA_API_CONFIG_environment,
+    shortCode: process.env.MPESA_API_CONFIG_shortCode,
+    initiatorName: process.env.MPESA_API_CONFIG_initiatorName,
+    lipaNaMpesaShortCode: process.envMPESA_API_CONFIG_lipaNaMpesaShortCode,
+    lipaNaMpesaShortPass: process.env.MPESA_API_CONFIG_lipaNaMpesaShortPass,
+    securityCredential: process.env.MPESA_API_CONFIG_securityCredential
 });
 
 // Express and CORS middleware init
@@ -43,10 +41,6 @@ var randomstring = require("randomstring");
 var tinyURL = require('tinyurl');
 var twilio = require('twilio');
 
-// const {WebhookClient} = require('dialogflow-fulfillment');
-// const {Card, Suggestion} = require('dialogflow-fulfillment');
-// process.env.DEBUG = 'dialogflow:debug';
-
 // CElO init
 const contractkit = require('@celo/contractkit');
 const { isValidPrivate, privateToAddress, privateToPublic, pubToAddress, toChecksumAddress } = require ('ethereumjs-util');
@@ -54,7 +48,7 @@ const bip39 = require('bip39-light');
 const crypto = require('crypto');
 
 
-const NODE_URL = 'https://alfajores-forno.celo-testnet.org'; //'https://baklava-forno.celo-testnet.org'
+const NODE_URL = process.env.CELO_NODE_URL; 
 const kit = contractkit.newKit(NODE_URL);
 
 const trimLeading0x = (input) => (input.startsWith('0x') ? input.slice(2) : input);
@@ -220,26 +214,6 @@ app.post("/", async (req, res) => {
     // DONE!!!
 });
 
-// app.get("/", async (request, response) => {
-//     try {
-
-//         const usersQuerySnapshot = await firestore.collection('accounts').get();
-//         const users = [];
-//         usersQuerySnapshot.forEach(
-//             (doc) => {
-//                 users.push({
-//                     id: doc.id,
-//                     data: doc.data()
-//                 });
-//             }
-//         );    
-//         response.json(users);    
-//       } catch(error){    
-//         response.status(500).send(error);    
-//       }
-// });
-//
-
 //FUNCTIONS
 
 async function getAccBalance(userMSISDN){
@@ -275,20 +249,6 @@ async function getAccDetails(userMSISDN){
     return `END Your Account Number is: ${userMSISDN}
                 ...Account Address is: ${url}`;
 }
-
-// async function USSDgetAccountDetails(phoneNumber){
-//     let userMSISDN = phoneNumber;
-//     console.log('PhoneNumber: ', userMSISDN)
-//     let userId = await getRecipientId(userMSISDN)
-//     let accAddress = await getReceiverDetails(userId)
-//     console.log('@Celo Address:',accAddress)
-//     // let userAddress = '0x9f5675c3b3af6e7b93f71f0c5821ae9b4155afcf';
-//     let url = await getAddressUrl(accAddress)
-//     console.log('Address: ',url);            
-//     return `END Your Account Number is: ${userMSISDN}
-//                 ...Account Address is: ${url}`;
-// }
-
 
 async function transfercGOLD(senderId, recipientId, amount){
     try{
@@ -364,7 +324,7 @@ async function addUserDataToDB(userId){
     let loginpin = await generateLoginPin();
     console.log('Login Pin:\t', loginpin);      
 
-    // let mnemonic = await bip39.generateMnemonic(256);
+    let mnemonic = await bip39.generateMnemonic(256);
     let mnemonic = 'crush swing work toast submit sense remember runway that ball sudden wash blast pen citizen liquid style require head comic curtain original sell shield';
     console.log('Seed Key:\t', mnemonic);
 
@@ -394,15 +354,16 @@ async function addUserDataToDB(userId){
   }
 
 function twilioSMSSender(to, message) {
-    var accountSid = 'AC6b6f13b697ea1dc6f415fec079b32409'; // Your Account SID from www.twilio.com/console
-    var authToken = 'b6744ccdfc4d5a421319b4f8669a10d4';   // Your Auth Token from www.twilio.com/console
+    var accountSid = process.env.TWILI_API_accountSid; // Your Account SID from www.twilio.com/console
+    var authToken = process.env.TWILI_API_authToken;   // Your Auth Token from www.twilio.com/console
+    var twilioPhoneNumber = process.env.TWILI_API_phoneNumber;
 
     var client = new twilio(accountSid, authToken);
 
     client.messages.create({
         body: message,
         to: to,  // Text this number
-        from: '+12563611814' // From a valid Twilio number
+        from: twilioPhoneNumber // From a valid Twilio number
     })
     .then((message) => console.log(message.sid));
 }
@@ -480,8 +441,7 @@ function getRecipientId(phoneNumber){
 //MPESA LIBRARIES
 async function mpesaSTKpush(phoneNumber, amount){
     const accountRef = Math.random().toString(35).substr(2, 7);
-    const URL = "https://us-central1-kotanicelo.cloudfunctions.net/mpesaCallback";
-    // const URL = "https://us-central1-yehtu-1de60.cloudfunctions.net/mpesaCallback";
+    const URL = "${SERVER_API_URL}/mpesaCallback";
     try{
         let result = await mpesaApi.lipaNaMpesaOnline(phoneNumber, amount, URL + '/lipanampesa/success', accountRef)
         // console.log(result);
@@ -500,7 +460,7 @@ async function mpesaSTKpush(phoneNumber, amount){
 }
 
 async function mpesa2customer(phoneNumber, amount){  
-    const URL = 'https://us-central1-yehtu-1de60.cloudfunctions.net/mpesaCallback';    
+    const URL = '${SERVER_API_URL}/mpesaCallback';    
     
     const { shortCode } = mpesaApi.configs;
     const testMSISDN = phoneNumber;
@@ -521,46 +481,7 @@ mpesaApp.post("/lipanampesa/success", async (req, res) => {
     res.send('Request Received'); 
 });
   
-//   mpesaApp.post("/lipanampesa/success", async (req, res) => {
-//     console.log('-----------LNM VALIDATION REQUEST-----------');
-//   	console.log(prettyjson.render(req.body, options));
-//   	console.log('-----------------------');
-//     // let mpesatxstatus = req.body.ResultCode
-//     // if (mpesatxstatus == 0){
-//     //     console.log('MpesaReceiptNumber: ', req.body.CallbackMetadata.MpesaReceiptNumber);
-//     // }else{
-//     //   console.log('transaction failed')
-//     // }
-//     console.log('Sender Phone Number: ', userMSISDN); 
-//     getSenderId(userMSISDN)
-//     .then(senderId=>{
-//       console.log('Sender ID: ', senderId);
-//       let escrowAddress = '0x9f5675c3B3Af6E7B93f71F0c5821AE9b4155aFCf';
-//       let escrowPrivKey = `f46fc1285b0240a093d311f5ed1f4aa00363b01d9f7c4c58fc2c368e1fb492f6`;
-//       // let myAddress = '0xF98F92a2B78C497F963666fd688620cd5095A251';
-//       checkIfExistsInDb(senderId)
-//       //let docData = await 
-//       let docRef = firestore.collection('accounts').doc(senderId)
-//       docRef.get().then((doc) => {
-//         let receiverAddress = `${doc.data().publicAddress}`;
-//         console.log('Amount to send: ',amount); 
-//         // let amount = `${data[1]*100000000}`;
-//         console.log('Receiver Address: ', receiverAddress)
-//         sendcGold(escrowAddress, receiverAddress, amount, escrowPrivKey)
-//       })
-//       // console.log('Sending to: ',publicAddress)
-//     })
-//     //let senderId = getSenderId(userMSISDN);          // sender = phoneNumber.substring(1); 
-//   	let message = {
-//   		"ResultCode": 0,
-//   		"ResultDesc": "Success",
-//   		"ThirdPartyTransID": "1234567890"
-//   	};
-  
-//   	res.json(message);
-//     // res.send('Request Received');  
-//   })
-  
+ 
   mpesaApp.post('/b2c/result', (req, res) => {
       console.log('-----------B2C CALLBACK------------');
       console.log(prettyjson.render(req.body, options));
